@@ -7,7 +7,7 @@ apt update && apt upgrade -y && update-grub && sleep 2 && reboot
 
 ### INSTALL SCRIPT 
 ```
-apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubusercontent.com/irulgood/Apex/ZX/ubu20-deb10-stable.sh && chmod +x ubu20-deb10-stable.sh && ./ubu20-deb10-stable.sh
+apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubusercontent.com/irulgood/Apex2/ZX/ubu20-deb10-stable.sh && chmod +x ubu20-deb10-stable.sh && ./ubu20-deb10-stable.sh
 ```
 ### KALO STATUS HPOXY MERAH
 ```
@@ -18,7 +18,7 @@ systemctl restart haproxy
 ```
 ## UPDATE SCRIPT
 ```
-wget -q https://raw.githubusercontent.com/irulgood/Apex/ZX/update.sh && chmod +x update.sh && ./update.sh
+wget -q https://raw.githubusercontent.com/irulgood/Apex2/ZX/update.sh && chmod +x update.sh && ./update.sh
 ```
 
 ### WORK DI OS
