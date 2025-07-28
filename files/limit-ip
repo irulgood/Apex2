@@ -1,0 +1,52 @@
+cat > /etc/xray/limit-ip.sh << 'EOF'
+#!/bin/bash
+
+function send_log() {
+  CHATID=$(grep -E "^#bot# " "/etc/bot/.bot.db" | cut -d ' ' -f 3)
+  KEY=$(grep -E "^#bot# " "/etc/bot/.bot.db" | cut -d ' ' -f 2)
+  TIME="10"
+  URL="https://api.telegram.org/bot$KEY/sendMessage"
+  TEXT="
+<code>────────────────────</code>
+<b>⚠️ NOTIFICATIONS MULTI LOGIN ⚠️</b>
+<code>────────────────────</code>
+<code>Username  : </code><code>$user</code>
+<code>Limit Ip  : </code><code>$iplimit</code>
+<code>────────────────────</code>"
+  curl -s --max-time $TIME -d "chat_id=$CHATID&disable_web_page_preview=1&text=$TEXT&parse_mode=html" $URL >/dev/null
+}
+
+function check_active_ip() {
+  grep "$1" /var/log/xray/access.log | cut -d " " -f 3 | sed 's/tcp:////g' | cut -d ":" -f 1 | sort | uniq
+}
+
+function limit_ip_check() {
+  local PROTO=$1
+  local MARK=$2
+  local DBPATH=$3
+
+  echo -n > /var/log/xray/access.log
+  sleep 1
+
+  for user in $(ls /etc/kyt/limit/$PROTO/ip 2>/dev/null); do
+    iplimit=$(cat /etc/kyt/limit/$PROTO/ip/$user)
+    active_ips=$(check_active_ip "$user")
+    ip_count=$(echo "$active_ips" | wc -l)
+
+    if [[ $ip_count -gt $iplimit ]]; then
+      exp=$(grep -w "^$MARK $user" "/etc/xray/config.json" | cut -d ' ' -f 3 | sort | uniq)
+      sed -i "/^$MARK $user $exp/,/^},{/d" /etc/xray/config.json
+      sed -i "/^### $user $exp/d" $DBPATH
+      rm -f /etc/kyt/limit/$PROTO/ip/$user
+      systemctl restart xray >/dev/null 2>&1
+      send_log
+    fi
+    sleep 0.1
+  done
+}
+
+# Jalankan semua protokol
+limit_ip_check "vmess" "###" "/etc/vmess/.vmess.db"
+limit_ip_check "vless" "#&" "/etc/vless/.vless.db"
+limit_ip_check "trojan" "#!" "/etc/trojan/.trojan.db"
+EOF
