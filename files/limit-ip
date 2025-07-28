@@ -25,7 +25,6 @@ function limit_ip_check() {
   local MARK=$2
   local DBPATH=$3
 
-  echo -n > /var/log/xray/access.log
   sleep 1
 
   for user in $(ls /etc/kyt/limit/$PROTO/ip 2>/dev/null); do
