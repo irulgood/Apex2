@@ -1,51 +1,53 @@
 #!/bin/bash
 
-# Script: backup-efficient.sh
-# Tujuan: Backup VPS dari /dev/vda → qcow2 → img.gz dengan efisiensi storage
-# Author: ChatGPT x @kamir1673
+# backup-clean.sh
+# Backup VPS Ubuntu yang efisien (hanya isi aktif) → hasil: .img.gz siap untuk DO
+# By ChatGPT x @kamir1673
 
 set -e
 
-echo "🚀 [START] Backup VPS tanpa habisin storage..."
+echo "🚀 [START] Backup VPS dengan optimalisasi ruang..."
 
-# === CONFIG ===
+# === VARIABEL ===
 DISK="/dev/vda"
+PART="/dev/vda1"
 DATE=$(date +%Y%m%d)
-BASE="ubuntu20-efficient-${DATE}"
-QCOW2="${BASE}.qcow2"
-FINAL_IMG="${BASE}.img"
-FINAL_GZ="${FINAL_IMG}.gz"
+BASE="ubuntu20-clean-${DATE}"
+IMG="${BASE}.img.gz"
 
-# === Cek tool
-for tool in qemu-img gzip curl; do
-  if ! command -v $tool &> /dev/null; then
-    echo "📦 Menginstal $tool..."
-    sudo apt update
-    sudo apt install -y ${tool/qemu-img/qemu-utils}
-  fi
+# === CEK TOOLS ===
+for tool in qemu-img gzip zerofree; do
+    if ! command -v $tool &> /dev/null; then
+        echo "📦 Menginstal $tool..."
+        sudo apt update
+        sudo apt install -y ${tool/qemu-img/qemu-utils}
+    fi
 done
 
-# === Step 1: Convert langsung /dev/vda → qcow2
-echo "💾 [QCOW2] Convert dari $DISK → $QCOW2"
-sudo qemu-img convert -f raw -O qcow2 $DISK $QCOW2
+# === STEP: Bersihkan blok kosong (butuh boot dari rescue/live mode) ===
+echo "🧼 Membersihkan blok kosong dengan zerofree (butuh partisi unmounted)..."
+mountpoint=$(mount | grep "$PART" || true)
+if [ -n "$mountpoint" ]; then
+    echo "❌ Partisi $PART sedang digunakan. Jalankan script ini dari Rescue Mode / Live CD!"
+    exit 1
+fi
 
-# === Step 2: Convert qcow2 → raw (ringan)
-echo "📦 [RAW] Convert QCOW2 → $FINAL_IMG"
-qemu-img convert -O raw $QCOW2 $FINAL_IMG
+zerofree $PART
 
-# (Hapus qcow2 kalau mau hemat)
-rm -f $QCOW2
+# === STEP: Buat file QCOW2 dari partisi utama saja ===
+echo "💾 Membuat QCOW2 dari $PART → ${BASE}.qcow2"
+qemu-img convert -f raw -O qcow2 $PART ${BASE}.qcow2
 
-# === Step 3: Kompres ke gzip
-echo "🗜️ [GZIP] Kompres $FINAL_IMG → $FINAL_GZ"
-gzip -9 $FINAL_IMG
+# === STEP: Konversi QCOW2 langsung ke IMG.GZ (hemat storage) ===
+echo "📦 Mengkonversi langsung ke IMG.GZ tanpa file .img mentah..."
+qemu-img convert -O raw ${BASE}.qcow2 - | gzip -9 > ${IMG}
 
-# === Step 4: Upload ke transfer.sh
-echo "☁️ [UPLOAD] Upload ke transfer.sh..."
-LINK=$(curl --upload-file $FINAL_GZ https://transfer.sh/$FINAL_GZ)
+# === STEP: Upload ke transfer.sh ===
+echo "☁️ Mengupload hasil backup ke transfer.sh..."
+LINK=$(curl --upload-file ${IMG} https://transfer.sh/${IMG})
 
-# === DONE
+# === SELESAI ===
 echo ""
-echo "✅✅✅ Backup Selesai!"
-echo "📁 File: $FINAL_GZ"
-echo "🔗 Link: $LINK"
+echo "✅ Backup selesai!"
+echo "📦 File: ${IMG}"
+echo "🔗 Link: ${LINK}"
