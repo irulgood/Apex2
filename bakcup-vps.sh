@@ -1,71 +1,51 @@
 #!/bin/bash
 
-# Script: backup-vps-auto.sh
-# Tujuan: Backup disk VPS, compress, upload, dan kasih link
+# Script: backup-efficient.sh
+# Tujuan: Backup VPS dari /dev/vda → qcow2 → img.gz dengan efisiensi storage
 # Author: ChatGPT x @kamir1673
 
 set -e
 
-echo "🚀 [START] Backup VPS Otomatis dengan Konversi QCOW2 + Upload"
+echo "🚀 [START] Backup VPS tanpa habisin storage..."
 
 # === CONFIG ===
 DISK="/dev/vda"
 DATE=$(date +%Y%m%d)
-BASENAME="ubuntu20-img-${DATE}"
-RAW_ORI="${BASENAME}-raw.img"
-QCOW2_TMP="${BASENAME}.qcow2"
-RAW_FINAL="${BASENAME}.img"
-FINAL_GZ="${RAW_FINAL}.gz"
+BASE="ubuntu20-efficient-${DATE}"
+QCOW2="${BASE}.qcow2"
+FINAL_IMG="${BASE}.img"
+FINAL_GZ="${FINAL_IMG}.gz"
 
-# === Step 0: Install semua tools kalau belum ada ===
-echo "🛠️ [CHECK] Install tool pendukung jika diperlukan..."
-REQUIRED_TOOLS=(dd qemu-img gzip curl)
-
-for tool in "${REQUIRED_TOOLS[@]}"; do
+# === Cek tool
+for tool in qemu-img gzip curl; do
   if ! command -v $tool &> /dev/null; then
-    echo "📦 Installing missing tool: $tool..."
+    echo "📦 Menginstal $tool..."
     sudo apt update
-    case $tool in
-      qemu-img)
-        sudo apt install -y qemu-utils
-        ;;
-      *)
-        sudo apt install -y "$tool"
-        ;;
-    esac
-  else
-    echo "✅ $tool sudah terinstall"
+    sudo apt install -y ${tool/qemu-img/qemu-utils}
   fi
 done
 
-# === Step 1: Backup RAW disk ===
-echo "📥 [BACKUP] Membuat raw image dari $DISK → $RAW_ORI (ini akan makan waktu)..."
-sudo dd if=$DISK of=$RAW_ORI bs=1M status=progress conv=fsync
+# === Step 1: Convert langsung /dev/vda → qcow2
+echo "💾 [QCOW2] Convert dari $DISK → $QCOW2"
+sudo qemu-img convert -f raw -O qcow2 $DISK $QCOW2
 
-# === Step 2: Convert ke QCOW2 ===
-echo "💾 [CONVERT] Konversi ke QCOW2 → $QCOW2_TMP"
-qemu-img convert -f raw -O qcow2 $RAW_ORI $QCOW2_TMP
+# === Step 2: Convert qcow2 → raw (ringan)
+echo "📦 [RAW] Convert QCOW2 → $FINAL_IMG"
+qemu-img convert -O raw $QCOW2 $FINAL_IMG
 
-# === Hapus RAW ORI (hemat ruang)
-rm -f $RAW_ORI
+# (Hapus qcow2 kalau mau hemat)
+rm -f $QCOW2
 
-# === Step 3: Convert QCOW2 ke RAW kecil
-echo "📦 [RECONVERT] QCOW2 → RAW ringan → $RAW_FINAL"
-qemu-img convert -O raw $QCOW2_TMP $RAW_FINAL
+# === Step 3: Kompres ke gzip
+echo "🗜️ [GZIP] Kompres $FINAL_IMG → $FINAL_GZ"
+gzip -9 $FINAL_IMG
 
-rm -f $QCOW2_TMP
+# === Step 4: Upload ke transfer.sh
+echo "☁️ [UPLOAD] Upload ke transfer.sh..."
+LINK=$(curl --upload-file $FINAL_GZ https://transfer.sh/$FINAL_GZ)
 
-# === Step 4: Kompres file final
-echo "🗜️ [COMPRESS] Mengompresi $RAW_FINAL → $FINAL_GZ"
-gzip -9 $RAW_FINAL
-
-# === Step 5: Upload ke transfer.sh
-echo "☁️ [UPLOAD] Mengupload ke transfer.sh..."
-LINK=$(curl --upload-file ./$FINAL_GZ https://transfer.sh/$FINAL_GZ)
-
-# === DONE ===
+# === DONE
 echo ""
-echo "✅✅✅ Backup VPS SELESAI!"
-echo "📁 File image: $FINAL_GZ"
-echo "🔗 Link Download Siap Pakai (Custom Image DO):"
-echo "$LINK"
+echo "✅✅✅ Backup Selesai!"
+echo "📁 File: $FINAL_GZ"
+echo "🔗 Link: $LINK"
